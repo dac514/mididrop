@@ -52,3 +52,23 @@ jobs:
         with:
           name: xrnx
           path: dist/*.xrnx
+
+  # The MIDI Drop window on every OS users have: most of them are on Windows and macOS.
+  dropper:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Format
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --manifest-path dropper/Cargo.toml -- --check
+
+      - name: Test
+        run: cargo test --locked --manifest-path dropper/Cargo.toml
+
+      - name: Build
+        run: cargo build --locked --release --manifest-path dropper/Cargo.toml

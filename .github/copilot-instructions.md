@@ -19,4 +19,8 @@ workflow. Follow it unless these Copilot-specific notes are more precise.
   `CLAUDE.md`; do not claim runtime or GUI behavior is verified without
   checking it through the bridge.
 
+- The drop window lives in `dropper/` (Rust). Run `cargo fmt` and
+  `just dropper-test` after changing it, and keep `dropper/src/wire.rs` in
+  sync with `src/wire.lua`.
+
 Do not change unrelated files or weaken existing checks.

@@ -89,3 +89,15 @@ init ID NAME AUTHOR="":
 # Refresh definitions/ and docs/renoise/ from GitHub
 update-defs *ARGS:
     {{rn}} update-defs {{ARGS}}
+
+# Build the MIDI Drop window (dropper/, needs cargo)
+dropper-build:
+    cargo build --release --manifest-path dropper/Cargo.toml
+
+# Run the MIDI Drop window: just dropper-run [-- --port N]
+dropper-run *ARGS:
+    cargo run --release --manifest-path dropper/Cargo.toml {{ARGS}}
+
+# Unit tests of the MIDI Drop window
+dropper-test:
+    cargo test --manifest-path dropper/Cargo.toml

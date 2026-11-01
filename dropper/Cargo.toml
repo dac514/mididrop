@@ -1,0 +1,22 @@
+[package]
+name = "midi-drop"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Drop window for the MIDI Drop Renoise tool: drag MIDI from a plugin, it lands at the Renoise cursor"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "midi-drop"
+path = "src/main.rs"
+
+[dependencies]
+# 0.33 is the newest eframe that builds on Rust 1.88+; newer ones need 1.95.
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "x11"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

@@ -16,3 +16,6 @@ log/
 __pycache__/
 .DS_Store
 Thumbs.db
+
+# MIDI Drop window build output
+dropper/target/

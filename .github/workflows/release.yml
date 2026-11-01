@@ -18,3 +18,77 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" dist/*.xrnx --title "${GITHUB_REF_NAME}" --generate-notes
+
+  # The MIDI Drop window, one archive per OS, attached to the same release.
+  # Archives, not bare binaries: a browser download of a bare file loses its +x bit.
+  dropper-linux:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: cargo build --locked --release --manifest-path dropper/Cargo.toml
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tar czf midi-drop-linux-x86_64.tar.gz -C dropper/target/release midi-drop
+          gh release upload "${GITHUB_REF_NAME}" midi-drop-linux-x86_64.tar.gz
+
+  dropper-windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: cargo build --locked --release --manifest-path dropper/Cargo.toml
+      - name: Upload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Compress-Archive -Path dropper/target/release/midi-drop.exe -DestinationPath midi-drop-windows-x86_64.zip
+          gh release upload "$env:GITHUB_REF_NAME" midi-drop-windows-x86_64.zip
+
+  # A universal (Apple Silicon + Intel) "MIDI Drop.app", ad-hoc signed.
+  dropper-macos:
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build both architectures
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --locked --release --manifest-path dropper/Cargo.toml --target aarch64-apple-darwin
+          cargo build --locked --release --manifest-path dropper/Cargo.toml --target x86_64-apple-darwin
+      - name: Bundle the app
+        run: |
+          APP="MIDI Drop.app"
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p "$APP/Contents/MacOS"
+          lipo -create -output "$APP/Contents/MacOS/midi-drop" \
+            dropper/target/aarch64-apple-darwin/release/midi-drop \
+            dropper/target/x86_64-apple-darwin/release/midi-drop
+          cat > "$APP/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>MIDI Drop</string>
+            <key>CFBundleDisplayName</key><string>MIDI Drop</string>
+            <key>CFBundleIdentifier</key><string>com.dac514.MidiDrop.window</string>
+            <key>CFBundleExecutable</key><string>midi-drop</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" midi-drop-macos-universal.zip
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" midi-drop-macos-universal.zip

@@ -8,13 +8,71 @@ inspect it from the command line while Renoise is running.
 ## What you are working on
 
 - The tool is the single `*.xrnx/` folder in the repo root
-  (`com.example.MyTool.xrnx/` until `just init` renames it). Everything else is tooling.
+  (`com.dac514.MidiDrop.xrnx/`) plus the drop window in `dropper/`. Everything else is tooling.
 - Lua dialect: **LuaJIT** = Lua 5.1 syntax (`unpack`, `loadstring`, `setfenv`;
   `bit` is built in; no `goto`, no `//`, no integer subtype).
 - Renoise API version **6.2** (Renoise 3.5). The API reference is vendored in
   `definitions/library/` and the guides in `docs/renoise/`. Prefer those over memory.
 - Renoise must be running, with the tool installed, for every command that talks
   to the dev bridge (`ping`, `eval`, `reload`, `views`, `log`, `song`, `check`).
+
+## This project: MIDI Drop
+
+Repo: https://github.com/dac514/mididrop. Users are mostly on **Windows and macOS**; it was built
+and verified on Linux. Prefer fixes that keep all three working, and say which OS you verified on.
+
+- The tool places MIDI at the Renoise cursor (pattern or phrase editor, selected instrument).
+  Pipeline: `src/smf.lua` (parse) -> `src/target.lua` (where) -> `src/place.lua` (cells) ->
+  `src/writer.lua` (song edit, one undo step). `App.import_bytes(name, bytes)` /
+  `App.import_file(path)` run it; both are callable from `just eval`.
+- Drops arrive from `dropper/` (Rust, eframe 0.33 pinned for Rust 1.88+, `Cargo.lock` committed,
+  CI uses `--locked`), a separate always-on-top window that reads the dropped file at once and sends
+  its bytes to `src/server.lua` on `127.0.0.1:19870` (`src/wire.lua` framing, mirrored in
+  `dropper/src/wire.rs`; keep both and their tests in sync).
+- *Launch window* (`App.launch_dropper`): Linux runs the binary (after `io.chmod 755`), macOS runs
+  `open -n "MIDI Drop.app" --args --port N` (finds `/Applications/MIDI Drop.app` by itself),
+  Windows runs PowerShell `Start-Process` so the child does not inherit Renoise's sockets.
+- User-facing text: `src/text.lua` (Lua, unit-tested) and `dropper/src/app.rs`. READMEs use plain,
+  friendly English for readers whose first language is not English: short sentences, no idioms.
+
+### Testing without a plugin, on any OS
+
+- `just dropper-run` builds and starts the window. Drag any `.mid` from Finder / Explorer / a file
+  manager onto it, or pass one: `just dropper-run -- path/to/clip.mid` (placed on startup).
+- `just eval 'return APP.import_file("/path/clip.mid")'` runs the same import without the window.
+- Read cells back with `just eval` (`song:pattern(p):track(t):line(l).note_columns[c].note_string`).
+- `just views` / `just screenshot` for the monitor. The drop window is not a Renoise window: on X11,
+  capture it with `import -window <id>` (find the id with `xprop -root _NET_CLIENT_LIST`); elsewhere
+  use the OS screenshot tool.
+- CI (`.github/workflows/ci.yml`) builds and tests the window on ubuntu, windows and macos on every
+  push. `release.yml` attaches a Linux `.tar.gz`, a Windows `.zip` and a universal, ad-hoc signed
+  `MIDI Drop.app` zip to each `v*` tag.
+
+### Open items (good first work, especially on Windows/macOS)
+
+- Real plugin drag on Windows and macOS (Linux was tested with file-manager drags only).
+- *Launch window* on Windows (PowerShell path) and macOS (`open` + Gatekeeper on the unsigned app).
+- macOS file promises (`NSFilePromiseProvider`): winit only delivers real file paths.
+- Check whether Windows sockets leak into the launched window anyway (`Start-Process` should prevent
+  it). On Unix the window closes inherited fds at startup (`close_inherited_fds` in `main.rs`).
+
+### Verified the hard way (2026-11-01, Renoise 3.5.4, Linux)
+
+- `add_file_import_hook` for `.mid`: only category `"song"` overrides native import, and Renoise
+  then asks to save and **replaces the song before calling the hook**. Other categories are
+  ignored. Never register it; that is why the external window exists.
+- ViewBuilder views cannot receive OS file drops.
+- winit's native Wayland backend rejects file drops; the window forces X11 (`WAYLAND_DISPLAY`
+  removed at startup) and accepts drops from Wayland apps and X11 plugin windows.
+- A program started with `os.execute` inherits Renoise's listening sockets (dev bridge ports and
+  the tool's 19870), so the tool cannot re-bind after a reload while it runs.
+- `song:can_undo()` reads false inside bridge evals, yet real Undo works and removes a drop in
+  one step ("'MIDI Drop: x.mid' was undone").
+- Cursor changes (`selected_line_index`, `transport.edit_pos`) apply on the next idle tick:
+  set the cursor in one `just eval`, drop in the next.
+- Renoise frees a closed listening port a moment later; `server.start` keeps retrying the bind.
+- Several ReSlop tools installed at once each run a dev bridge on 18765+; after a reload they can
+  swap ports, so `just eval` may briefly reach another tool. Check `just ping` (`bundle_path`).
 
 ## Commands
 
@@ -49,7 +107,7 @@ first line; exit codes: 0 ok, 1 remote/Lua error, 2 usage, 3 cannot connect,
 3. `just reload` (full, any file). `just reload-soft` is faster for `src/`-only edits but keeps old
    closures registered outside `App.reg` and does not touch `main.lua`, `manifest.xml` or `dev/`.
 4. Verify inside the running Renoise: `just eval 'APP.show_dialog()'`, `just views`,
-   `just eval 'dev.set("greeting", "x")'`, `just log`, `just screenshot`. Do not report a GUI
+   `just eval 'dev.set("max_columns", 4)'`, `just log`, `just screenshot`. Do not report a GUI
    change as working until `views` (and, for layout, a screenshot) shows it.
 5. `just check` again, then commit.
 
@@ -103,14 +161,17 @@ scripts/renoise.py            CLI: doctor, paths, install, uninstall, sync, ping
 stylua.toml                   2-space, 100 cols, double quotes, call_parentheses = None
 definitions/                  vendored renoise/definitions (LuaCATS); UPSTREAM.md records the commit
 docs/renoise/                 vendored xrnx guide pages (start/, guide/)
-.github/workflows/ci.yml      stylua --check, lua-language-server --check, unit tests, package
-.github/workflows/release.yml tag v* -> GitHub release with the .xrnx attached
+.github/workflows/ci.yml      stylua, LuaLS, unit tests, package; dropper fmt/test/build on 3 OSes
+.github/workflows/release.yml tag v* -> GitHub release with the .xrnx and the 3 drop window archives
 <Id>.xrnx/manifest.xml        Id (== folder name), ApiVersion 6.2, Version like 1.02 (no semver)
 <Id>.xrnx/main.lua            thin entry: package.path, preferences, APP = require "src.app", APP.start(), dev bridge
 <Id>.xrnx/src/app.lua         App.start/stop, App.reg (menu/key/notifier/timer), App.register_dialog, App.guard, App.defer
-<Id>.xrnx/src/ui.lua          ViewBuilder dialog; returns (vb, root)
-<Id>.xrnx/src/labels.lua      pure Lua (no renoise.*): the dialog's label strings; the unit-tested example
+<Id>.xrnx/src/ui.lua          the monitor dialog; returns (vb, root)
+<Id>.xrnx/src/smf.lua, place.lua, text.lua, wire.lua   pure Lua (no renoise.*), unit-tested
+<Id>.xrnx/src/target.lua, writer.lua, server.lua       read the song / edit it / listen on 19870
 tests/helper.lua              check/eq/fails/done for test files; tests/*_test.lua run under LuaJIT via `just test`
+tests/midi_builder.lua        builds MIDI file bytes for tests (no binary fixtures)
+dropper/                      the drop window: Rust + eframe; src/main.rs, app.rs (UI), net.rs, wire.rs
 <Id>.xrnx/dev/                dev bridge (bridge.lua, commands.lua, serialize.lua); never shipped
 ```
 
@@ -120,7 +181,7 @@ tests/helper.lua              check/eq/fails/done for test files; tests/*_test.l
   (it re-applies any local patches, which are listed in `definitions/UPSTREAM.md`).
 - `dev/` is development only: `src/` must never `require` anything from `dev.*`,
   and `package` strips it. `tests/` lives outside the bundle and is never shipped.
-- Logic worth unit-testing goes in a pure module (like `src/labels.lua`): no `renoise.*`
+- Logic worth unit-testing goes in a pure module (like `src/place.lua`): no `renoise.*`
   and no Renoise additions to the Lua stdlib (`table.find`, `oprint`, ...), because
   `just test` runs under plain LuaJIT where those do not exist. `src/app.lua` and
   `src/ui.lua` are not testable that way; keep them thin and push logic into pure modules.
@@ -144,7 +205,7 @@ tests/helper.lua              check/eq/fails/done for test files; tests/*_test.l
   `sequencer.pattern_sequence_observable`, `phrase_mappings_observable`) fire *during* the edit:
   the list is updated, dependents (pattern tracks, sequence, selection) are not, and they also
   fire on undo/redo. Inside them never edit the song; observe the dependent object if it has an
-  observable, else `App.defer(fn)`. Demo: the tracks row in `src/ui.lua`.
+  observable, else `App.defer(fn)`.
 - ViewBuilder constructor tables accept only documented fields; a typo such as
   `vb:text { margin = 1 }` crashes at runtime and LuaLS cannot catch it.
 - Manifest: `Id` must equal the folder name without `.xrnx`; `Version` is a

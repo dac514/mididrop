@@ -28,8 +28,15 @@ _AUTO_RELOAD_DEBUG = false
 -- Preferences: created once per tool load; Renoise persists them as
 -- preferences.xml inside the tool folder.
 if not renoise.tool().preferences then
-  renoise.tool().preferences = renoise.Document.create "MyToolPreferences" {
-    greeting = "Hello from My Tool",
+  renoise.tool().preferences = renoise.Document.create "MidiDropPreferences" {
+    port = 19870, -- localhost port the MIDI Drop window connects to
+    timing = 1, -- 1 = delay column, 2 = snap to lines
+    note_offs = true,
+    velocity = true,
+    paste = 1, -- 1 = overwrite, 2 = mix
+    overflow = 1, -- 1 = spill into next patterns, 2 = grow pattern, 3 = truncate
+    max_columns = 12,
+    dropper_path = "", -- MIDI Drop window executable, for "Launch drop window"
   }
 end
 
