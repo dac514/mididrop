@@ -15,6 +15,13 @@ scripts/renoise.py -h` lists the subcommands; each prints `ok ...` or `error
 
 Global options: `--bundle`, `--host`, `--port`, `--osc-port`, `--timeout`, `--json`.
 
+Several tools in development can run at once. Each tool's dev bridge listens on
+its own home port, worked out from the tool id (`dev/home_port.lua`, mirrored by
+`home_port()` here). Before every command, the CLI pings the likely ports and
+only talks to the bridge that reports this project's tool id. `--port N` (or
+`RENOISE_DEV_PORT`) skips that check, so you can reach another tool's bridge on
+purpose.
+
 ## Subcommands
 
 - `doctor`, `paths` — environment and Renoise folder detection.

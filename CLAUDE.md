@@ -71,8 +71,12 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
 - Cursor changes (`selected_line_index`, `transport.edit_pos`) apply on the next idle tick:
   set the cursor in one `just eval`, drop in the next.
 - Renoise frees a closed listening port a moment later; `server.start` keeps retrying the bind.
-- Several ReSlop tools installed at once each run a dev bridge on 18765+; after a reload they can
-  swap ports, so `just eval` may briefly reach another tool. Check `just ping` (`bundle_path`).
+- Several tools in development at once each run a dev bridge, and the old kit bridges all fought
+  over 18765 (after a reload `just eval` could run inside another tool). Now each bridge listens on
+  its own **home port** from its tool id (`dev/home_port.lua`, same formula as `home_port()` in
+  `scripts/renoise.py`; MidiDrop = 18867). `renoise.py` pings each candidate port and only uses the
+  one whose `tool_id` matches this project; the bridge refuses requests whose `tool` record names
+  another tool. `--port N` skips the check, for talking to another tool's bridge on purpose.
 
 ## Commands
 
