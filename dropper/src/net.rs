@@ -54,9 +54,16 @@ fn exchange(port: u16, frame: &[u8]) -> Result<Records, String> {
 
 /// Run requests until the sender is dropped. `notify` wakes the UI.
 pub fn worker(port: u16, requests: Receiver<Request>, replies: Sender<Reply>, notify: impl Fn()) {
+    // Where this program is, so the tool's *Launch window* can start it next time.
+    let exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
     for request in requests {
         let (frame, is_drop) = match &request {
-            Request::Status => (wire::encode(&[("kind", b"status")]), false),
+            Request::Status => (
+                wire::encode(&[("kind", b"status"), ("exe", exe.as_bytes())]),
+                false,
+            ),
             Request::Drop { name, data } => (
                 wire::encode(&[("kind", b"drop"), ("name", name.as_bytes()), ("data", data)]),
                 true,

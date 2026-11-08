@@ -10,9 +10,9 @@ Project page, downloads and screenshots: https://github.com/dac514/mididrop
 
 1. Open *Tools > MIDI Drop...* to see the **monitor**.
 2. Click **Launch window**. A small *MIDI Drop* window appears and stays on
-   top. Put it next to your plugin. (The first time, Renoise asks where the
-   window program is. Pick `MIDI Drop.app` on macOS, or `midi-drop.exe` /
-   `midi-drop` on Windows and Linux.)
+   top. Put it next to your plugin. (Don't have the window yet? MIDI Drop
+   shows you which file to download. Open it once, and MIDI Drop remembers
+   where it is.)
 3. Put the Renoise cursor where the clip should start.
 4. Drag MIDI from your plugin onto the MIDI Drop window. Done.
 
@@ -24,6 +24,11 @@ Changed your mind? *Undo* removes the whole drop in one step.
 You can also open the monitor from the right-click menu of the pattern editor
 and the phrase editor, or give it a key: *Global > Tools > Show MIDI Drop*.
 The window has a key too: *Global > Tools > Launch MIDI Drop Window*.
+
+The window opens where you left it last time. **Can't find it?** Maybe it was
+on a screen you unplugged. Choose *Tools > Find MIDI Drop Window*, and the
+window comes back to the top left of your main screen. This has a key too:
+*Global > Tools > Find MIDI Drop Window*.
 
 ## The monitor
 
@@ -93,9 +98,11 @@ and lists what the Renoise API would need so the window can go away.
 
 ## Install
 
-Drag `com.dac514.MidiDrop.xrnx` onto Renoise. Get the drop window for your
-system from the same release page and unpack it anywhere (on macOS, into
-*Applications*).
+Drag `com.dac514.MidiDrop.xrnx` onto Renoise. Then get the drop window for
+your system from https://github.com/dac514/mididrop/releases/latest and unpack
+it anywhere (on macOS, into *Applications*). Open it once, and MIDI Drop
+remembers where it is. Not sure which file? Click **Launch window** in the
+monitor, and MIDI Drop tells you.
 
 The window is not signed with a paid certificate:
 - macOS: right-click `MIDI Drop.app`, choose *Open*, then *Open* again. Only

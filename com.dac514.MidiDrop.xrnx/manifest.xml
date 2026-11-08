@@ -2,11 +2,11 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>6.2</ApiVersion>
   <Id>com.dac514.MidiDrop</Id>
-  <Version>1.00</Version>
+  <Version>1.01</Version>
   <Author>Dac Chartrand [dac.chartrand@gmail.com]</Author>
   <Name>MIDI Drop</Name>
   <Category>MIDI</Category>
-  <Description>Drag MIDI from a plugin onto the MIDI Drop window and it lands at the cursor, on the selected instrument, in the pattern or phrase editor.</Description>
+  <Description>Drag MIDI from a plugin onto the MIDI Drop window. It lands at the cursor, in the pattern or phrase editor.</Description>
   <Platform>Windows, Mac, Linux</Platform>
   <License>MIT</License>
   <DocumentationPath>README.md</DocumentationPath>

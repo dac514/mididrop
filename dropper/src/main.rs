@@ -11,6 +11,8 @@ use std::path::PathBuf;
 
 mod app;
 mod net;
+#[cfg(any(target_os = "linux", test))]
+mod window_memory;
 mod wire;
 
 const DEFAULT_PORT: u16 = 19870;
@@ -93,6 +95,10 @@ fn main() -> eframe::Result {
         std::env::remove_var("WAYLAND_DISPLAY");
     }
 
+    // With the `persistence` feature, eframe remembers the window's position and
+    // size in `app.ron`, in a folder named after the app id: ~/.local/share/midi-drop,
+    // ~/Library/Application Support/midi-drop, or %APPDATA%\midi-drop\data.
+    // The size below is only used the first time.
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("MIDI Drop")

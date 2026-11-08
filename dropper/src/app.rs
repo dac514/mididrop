@@ -11,10 +11,16 @@ use eframe::egui::{
 };
 
 use crate::net::{self, Reply, Request};
+#[cfg(target_os = "linux")]
+use crate::window_memory;
 use crate::wire::{self, Records};
 
 const POLL: Duration = Duration::from_millis(700);
 const FLASH: Duration = Duration::from_millis(900);
+
+/// Where *Launch window* in Renoise brings an open window back to: near the
+/// top-left corner of the main screen, which every OS puts at (0, 0).
+const SUMMON_AT: Pos2 = Pos2 { x: 80.0, y: 80.0 };
 
 const MARGIN: f32 = 18.0;
 const GAP: f32 = 12.0;
@@ -97,6 +103,49 @@ pub struct DropApp {
     flash: Option<(Instant, Color32)>,
     /// Files from the command line, placed on the first frame.
     startup: Vec<PathBuf>,
+    #[cfg(target_os = "linux")]
+    frame: FrameProbe,
+}
+
+/// Learns the window frame once per session (see `window_memory`).
+#[cfg(target_os = "linux")]
+struct FrameProbe {
+    started: Instant,
+    /// The outer position eframe restored, in pixels; `None` once probed.
+    requested: Option<Pos2>,
+    found: Option<egui::Vec2>,
+}
+
+#[cfg(target_os = "linux")]
+impl FrameProbe {
+    /// The window manager places the window a moment after it opens.
+    const SETTLE: Duration = Duration::from_millis(500);
+
+    fn new(storage: Option<&dyn eframe::Storage>) -> Self {
+        let requested = storage
+            .and_then(|s| eframe::get_value::<window_memory::Saved>(s, window_memory::KEY))
+            .and_then(|saved| saved.outer_position_pixels);
+        Self {
+            started: Instant::now(),
+            requested,
+            found: None,
+        }
+    }
+
+    fn update(&mut self, ctx: &egui::Context) {
+        let Some(requested) = self.requested else {
+            return;
+        };
+        if self.started.elapsed() < Self::SETTLE {
+            ctx.request_repaint_after(Self::SETTLE);
+            return;
+        }
+        if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
+            let landed = (inner.min.to_vec2() * ctx.pixels_per_point()).to_pos2();
+            self.found = window_memory::frame_offset(requested, landed);
+        }
+        self.requested = None;
+    }
 }
 
 impl DropApp {
@@ -121,6 +170,8 @@ impl DropApp {
             outcome: Outcome::Idle,
             flash: None,
             startup: files,
+            #[cfg(target_os = "linux")]
+            frame: FrameProbe::new(cc.storage),
         }
     }
 
@@ -138,13 +189,16 @@ impl DropApp {
         }
     }
 
-    fn receive(&mut self) {
+    fn receive(&mut self, ctx: &egui::Context) {
         while let Ok(reply) = self.replies.try_recv() {
             self.in_flight = self.in_flight.saturating_sub(1);
             match reply {
                 Reply::Status(r) => {
                     self.link = Link::Online;
                     self.target = Target::from_records(&r);
+                    if wire::text(&r, "summon") == "1" {
+                        self.summon(ctx);
+                    }
                 }
                 Reply::Dropped(r) => {
                     self.link = Link::Online;
@@ -187,6 +241,15 @@ impl DropApp {
         };
         self.outcome = Outcome::Failed { file, error };
         self.flash = Some((Instant::now(), P.error));
+    }
+
+    /// Come back to the main screen and to the front, for a window that is lost
+    /// (on a monitor that is gone, or behind other windows).
+    fn summon(&mut self, ctx: &egui::Context) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(SUMMON_AT));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.flash = Some((Instant::now(), P.accent));
     }
 
     fn take_drops(&mut self, ctx: &egui::Context) {
@@ -239,8 +302,29 @@ fn file_name(path: &Path, fallback: &str) -> String {
 }
 
 impl eframe::App for DropApp {
+    /// eframe saves the window position and size by itself (`persistence`);
+    /// nothing else of the UI needs to survive a restart.
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
+    /// eframe has just put the window settings into `storage`; fix their outer
+    /// position before it writes them to disk.
+    #[cfg(target_os = "linux")]
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let Some(frame) = self.frame.found else {
+            return;
+        };
+        if let Some(saved) = eframe::get_value(storage, window_memory::KEY) {
+            let fixed = window_memory::corrected(saved, frame);
+            eframe::set_value(storage, window_memory::KEY, &fixed);
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.receive();
+        #[cfg(target_os = "linux")]
+        self.frame.update(ctx);
+        self.receive(ctx);
         self.take_drops(ctx);
         self.poll();
         ctx.request_repaint_after(POLL);
