@@ -30,6 +30,19 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
 - *Launch window* (`App.launch_dropper`): Linux runs the binary (after `io.chmod 755`), macOS runs
   `open -n "MIDI Drop.app" --args --port N` (finds `/Applications/MIDI Drop.app` by itself),
   Windows runs PowerShell `Start-Process` so the child does not inherit Renoise's sockets.
+  The path comes from the window itself: every `status` request carries `exe`
+  (`current_exe()`), and the tool saves it in `dropper_path` (`src/drop_window.lua` turns it
+  into the `.app` on macOS and skips App Translocation copies). With no known path, *Launch
+  window* shows the "Get the drop window" dialog (`src/get_window_ui.lua`), which links to the
+  releases page, names this OS's file, closes itself when the window connects, and still offers
+  a file prompt.
+- The drop window remembers its position and size through eframe's `persistence` feature
+  (`app.ron` in `~/.local/share/midi-drop`, `~/Library/Application Support/midi-drop` or
+  `%APPDATA%\midi-drop\data`). On Linux, `dropper/src/window_memory.rs` corrects the saved
+  outer position (see below). A lost window comes back with *Tools > Find MIDI Drop Window*
+  (`App.find_dropper`, also a key binding): while a window is connected, the next `status` reply
+  carries `summon = "1"`, and the window moves to (80, 80) on the main screen and takes focus.
+  With no window connected, it does what *Launch window* does.
 - User-facing text: `src/text.lua` (Lua, unit-tested) and `dropper/src/app.rs`. READMEs use plain,
   friendly English for readers whose first language is not English: short sentences, no idioms.
 
@@ -53,6 +66,17 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
 - macOS file promises (`NSFilePromiseProvider`): winit only delivers real file paths.
 - Check whether Windows sockets leak into the launched window anyway (`Start-Process` should prevent
   it). On Unix the window closes inherited fds at startup (`close_inherited_fds` in `main.rs`).
+- Check that the drop window reopens where it was left on Windows and macOS. Both use eframe's own
+  restore, untested here. Also check a saved position on a monitor that is no longer connected
+  (eframe pulls it back on Windows, macOS does it by itself; GNOME did it on Linux), and that
+  *Find MIDI Drop Window* brings an open window back on both.
+- Check that a window started from Finder / Explorer is remembered on Windows and macOS, and that
+  *Launch window* then starts it from that path. Paths under `AppData\Local\Temp` (opened from
+  inside the zip) and App Translocation copies are not remembered on purpose.
+- Check *Find MIDI Drop Window* on a minimized window on Windows and macOS. The window checks in
+  from `update()`; if the OS stops redrawing a minimized window, it looks closed after 3 s and
+  *Find* starts a second one.
+- `just dropper-run` connects too, so it saves the `dropper/target/` path in `dropper_path`.
 
 ### Verified the hard way (2026-11-01, Renoise 3.5.4, Linux)
 
@@ -69,6 +93,10 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
 - Cursor changes (`selected_line_index`, `transport.edit_pos`) apply on the next idle tick:
   set the cursor in one `just eval`, drop in the next.
 - Renoise frees a closed listening port a moment later; `server.start` keeps retrying the bind.
+- (2026-11-07, GNOME on XWayland) winit reports the drop window's outer position as equal to its
+  inner position, and eframe restores the outer one, so the window came back one title bar (28 px)
+  lower on every start. `window_memory.rs` learns the frame once per session and saves
+  outer = inner - frame. The first restart after a fresh install still moves down once.
 - Several tools in development at once each run a dev bridge, and the old kit bridges all fought
   over 18765 (after a reload `just eval` could run inside another tool). Now each bridge listens on
   its own **home port** from its tool id (`dev/home_port.lua`, same formula as `home_port()` in
@@ -150,11 +178,13 @@ docs/renoise/                 vendored xrnx guide pages (start/, guide/)
 <Id>.xrnx/main.lua            thin entry: package.path, preferences, APP = require "src.app", APP.start(), dev bridge
 <Id>.xrnx/src/app.lua         App.start/stop, App.reg (menu/key/notifier/timer), App.register_dialog, App.guard, App.defer
 <Id>.xrnx/src/ui.lua          the monitor dialog; returns (vb, root)
-<Id>.xrnx/src/smf.lua, place.lua, text.lua, wire.lua   pure Lua (no renoise.*), unit-tested
+<Id>.xrnx/src/smf.lua, place.lua, text.lua, wire.lua, drop_window.lua   pure Lua (no renoise.*), unit-tested
+<Id>.xrnx/src/get_window_ui.lua  the "Get the drop window" dialog; returns (vb, root)
 <Id>.xrnx/src/target.lua, writer.lua, server.lua       read the song / edit it / listen on 19870
 tests/helper.lua              test helpers for tests/*_test.lua
 tests/midi_builder.lua        builds MIDI file bytes for tests (no binary fixtures)
-dropper/                      the drop window: Rust + eframe; src/main.rs, app.rs (UI), net.rs, wire.rs
+dropper/                      the drop window: Rust + eframe; src/main.rs, app.rs (UI), net.rs, wire.rs,
+                              window_memory.rs (Linux fix for the saved window position)
 <Id>.xrnx/dev/                dev bridge (bridge.lua, commands.lua, serialize.lua, home_port.lua); never shipped
 ```
 

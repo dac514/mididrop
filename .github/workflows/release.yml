@@ -12,6 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check that the tag matches the manifest Version
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' *.xrnx/manifest.xml)
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match <Version>${version}</Version> in manifest.xml"
+            exit 1
+          fi
       - name: Package
         run: python3 scripts/renoise.py package
       - name: Create GitHub release with the .xrnx attached

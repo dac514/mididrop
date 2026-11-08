@@ -26,7 +26,8 @@ MIDI Drop comes in two parts that work together:
   reads the MIDI and writes the notes into your song. Its window, the
   *monitor*, shows where the next drop will land, plus the options.
 - **The drop window** (`midi-drop`), a small window that stays on top of
-  everything. You drop MIDI on it, and it passes the MIDI to the tool.
+  everything. You drop MIDI on it, and it passes the MIDI to the tool. It
+  opens where you left it last time, at the same size.
 
 Why two parts? The short answer is that Renoise does not let a tool catch a
 drop by itself. The long answer is [further down](#why-a-second-window).
@@ -45,9 +46,12 @@ No drop window at hand, or the MIDI is already a file? Click
 2. Drag `com.dac514.MidiDrop.xrnx` onto Renoise to install the tool.
 3. Unpack the drop window somewhere you like. On macOS, move `MIDI Drop.app`
    to *Applications*.
-4. In Renoise, open *Tools > MIDI Drop...* and click **Launch window**. The
-   first time, it asks where you put the drop window. After that, it
-   remembers.
+4. Open the drop window once, by double-clicking it. MIDI Drop remembers
+   where it is. From then on, *Tools > MIDI Drop...* > **Launch window** in
+   Renoise starts it for you.
+
+Clicked **Launch window** before you had the drop window? MIDI Drop shows you
+which file to download, with a button to the download page.
 
 The drop window is not signed with a paid certificate, so your computer may
 warn you the first time:
@@ -64,6 +68,11 @@ warn you the first time:
    window tells you where the notes will land. After, it tells you what
    happened.
 3. Not what you wanted? Press *Undo* in Renoise once.
+
+The drop window opens where you left it last time. Can't find it, for
+example after you unplugged a screen? Choose *Tools > Find MIDI Drop Window*.
+The window comes back to the top left of your main screen. You can give it a
+key: *Global > Tools > Find MIDI Drop Window*.
 
 A few things work the way a tracker user would hope:
 

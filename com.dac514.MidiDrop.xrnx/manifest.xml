@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>6.2</ApiVersion>
   <Id>com.dac514.MidiDrop</Id>
-  <Version>1.00</Version>
+  <Version>1.01</Version>
   <Author>Dac Chartrand [dac.chartrand@gmail.com]</Author>
   <Name>MIDI Drop</Name>
   <Category>MIDI</Category>

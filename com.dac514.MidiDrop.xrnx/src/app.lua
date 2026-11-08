@@ -21,6 +21,7 @@ local text = require "src.text"
 local target = require "src.target"
 local writer = require "src.writer"
 local server = require "src.server"
+local drop_window = require "src.drop_window"
 
 local App = {}
 
@@ -41,6 +42,8 @@ App.pattern_menu_entry = "Pattern Editor:" .. App.name .. "..."
 App.phrase_menu_entry = "Phrase Editor:" .. App.name .. "..."
 App.launch_menu_entry = "Main Menu:Tools:" .. App.name .. " Window"
 App.launch_keybinding = "Global:Tools:Launch " .. App.name .. " Window"
+App.find_menu_entry = "Main Menu:Tools:Find " .. App.name .. " Window"
+App.find_keybinding = "Global:Tools:Find " .. App.name .. " Window"
 
 local OVERFLOW = { "spill", "grow", "truncate" }
 local PASTE = { "overwrite", "mix" }
@@ -311,12 +314,48 @@ function App.target_records()
   }
 end
 
+---When *Find MIDI Drop Window* was chosen (`os.time()`), or nil. The next status
+---reply asks the open drop window to come back to the main screen, in case it is
+---lost on a monitor that is gone. A request that no window picks up soon expires,
+---so a window started much later does not jump.
+---@type number|nil
+local summon_at = nil
+local SUMMON_SECONDS = 10 -- long enough for a window that Find starts to connect
+
+---Remember where the drop window program is, from the path a running window
+---reports. *Launch window* then starts it without asking.
+---@param exe string|nil
+local function remember_dropper(exe)
+  local path = drop_window.remembered_path(exe, os.platform())
+  local prefs = App.prefs()
+  if not path or path == prefs.dropper_path.value then
+    return
+  end
+  prefs.dropper_path.value = path
+  App.log("drop window found at " .. path)
+  local entry = App.dialogs.get_window
+  if entry and entry.dialog.visible then
+    App.defer(function()
+      entry.dialog:close()
+      renoise
+        .app()
+        :show_status "MIDI Drop: the drop window is connected. Launch window starts it from now on."
+    end)
+  end
+end
+
 ---Server request handler.
 ---@param records table<string, string>
 ---@return table<string, any>
 function App.handle_request(records)
   if records.kind == "status" then
-    return App.target_records()
+    remember_dropper(records.exe)
+    local reply = App.target_records()
+    if summon_at and os.time() - summon_at <= SUMMON_SECONDS then
+      reply.summon = "1"
+    end
+    summon_at = nil
+    return reply
   elseif records.kind == "drop" then
     local report, err = App.import_bytes(records.name or "", records.data or "")
     if not report then
@@ -357,13 +396,64 @@ local LAUNCH_CHECK_MS = 4000 -- how long the window gets to say hello
 ---@type fun()|nil
 local launch_check = nil
 
----Start the external drop window, asking for its location the first time.
----Does nothing (but say so) when a window is already talking to us, and warns
----when the launched window never connects.
-function App.launch_dropper()
+---@return boolean
+local function dropper_connected()
   local since = server.seconds_since_contact()
-  if since and since <= 3 then
-    renoise.app():show_status "MIDI Drop: the drop window is already open"
+  return since ~= nil and since <= 3
+end
+
+---Show how to get the drop window, when the tool does not know where it is.
+function App.show_get_window()
+  local existing = App.dialogs.get_window
+  if existing and existing.dialog.visible then
+    existing.dialog:show()
+    return
+  end
+  local ui = require "src.get_window_ui"
+  local vb, root = ui.build(os.platform(), {
+    open_page = App.guard(function()
+      renoise.app():open_url(drop_window.RELEASES_URL)
+    end),
+    locate = App.guard(function()
+      local path =
+        renoise.app():prompt_for_filename_to_read({ "*" }, "Choose the MIDI Drop window program")
+      if path == "" then
+        return
+      end
+      App.prefs().dropper_path.value = drop_window.remembered_path(path, os.platform()) or path
+      local entry = App.dialogs.get_window
+      if entry and entry.dialog.visible then
+        entry.dialog:close()
+      end
+      App.launch_dropper()
+    end),
+  })
+  local dialog = renoise.app():show_custom_dialog(App.name, root)
+  App.register_dialog("get_window", dialog, vb, root)
+end
+
+---Bring a lost drop window back to the main screen. When it is not open, start
+---it, and bring that one to the main screen too: its saved position may be on a
+---monitor that is gone.
+function App.find_dropper()
+  summon_at = os.time()
+  if not dropper_connected() then
+    App.launch_dropper()
+    return
+  end
+  renoise.app():show_status "MIDI Drop: the drop window moves to the top left of your main screen."
+end
+
+---Start the external drop window. When the tool does not know where it is yet,
+---show how to get it. Does nothing (but say so) when a window is already open,
+---and warns when the launched window never connects.
+function App.launch_dropper()
+  if dropper_connected() then
+    renoise.app():show_status(
+      "MIDI Drop: the drop window is already open. Can't see it? Use Tools > Find "
+        .. App.name
+        .. " Window."
+    )
     return
   end
   local prefs = App.prefs()
@@ -383,16 +473,13 @@ function App.launch_dropper()
     end
   end
   if path == "" or not io.exists(path) then
-    path = renoise.app():prompt_for_filename_to_read({ "*" }, "Locate the MIDI Drop window program")
-    if path == "" then
-      return
-    end
-    prefs.dropper_path.value = path
+    App.show_get_window()
+    return
   end
   local port = tostring(prefs.port.value)
   local platform = os.platform()
   -- Picked the program inside the bundle? Launch the bundle.
-  local bundle = path:match "^(.-%.app)/Contents/MacOS/"
+  local bundle = drop_window.app_bundle(path)
   if platform == "MACINTOSH" and bundle then
     path = bundle
   end
@@ -449,6 +536,8 @@ function App.start()
   reg.menu { name = App.phrase_menu_entry, invoke = App.guard(App.show_dialog) }
   reg.menu { name = App.launch_menu_entry, invoke = App.guard(App.launch_dropper) }
   reg.key { name = App.launch_keybinding, invoke = App.guard(App.launch_dropper) }
+  reg.menu { name = App.find_menu_entry, invoke = App.guard(App.find_dropper) }
+  reg.key { name = App.find_keybinding, invoke = App.guard(App.find_dropper) }
   -- Close dialogs when the song changes so no view keeps stale song references.
   reg.notifier(renoise.tool().app_new_document_observable, App.close_dialogs)
   reg.notifier(renoise.tool().tool_will_unload_observable, server.stop)
