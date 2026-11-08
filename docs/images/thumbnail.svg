@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="45" viewBox="0 0 120 45">
+<rect width="120" height="45" fill="#17181b"/>
+<rect x="9" y="8" width="29" height="29" rx="6" fill="#26282d" stroke="#3d4148" stroke-width="1"/>
+<rect x="14" y="14" width="9" height="3.2" rx="1.2" fill="#ef7a45"/>
+<rect x="14" y="19" width="13" height="3.2" rx="1.2" fill="#ef7a45"/>
+<rect x="20" y="24" width="12" height="3.2" rx="1.2" fill="#ef7a45"/>
+<rect x="12" y="30.5" width="23" height="2.6" rx="1.3" fill="#d35e2d"/>
+<text x="45" y="28.5" font-family="Inter Display" font-size="16.5" font-weight="800" fill="#f1f1f1" letter-spacing="-0.4">MIDI Drop</text>
+</svg>
