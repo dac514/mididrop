@@ -29,13 +29,16 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
   `dropper/src/wire.rs`; keep both and their tests in sync).
 - *Launch window* (`App.launch_dropper`): Linux runs the binary (after `io.chmod 755`), macOS runs
   `open -n "MIDI Drop.app" --args --port N` (finds `/Applications/MIDI Drop.app` by itself),
-  Windows runs PowerShell `Start-Process` so the child does not inherit Renoise's sockets.
+  Windows runs PowerShell `Start-Process` (so the child does not inherit Renoise's sockets)
+  through `io.popen`, never `os.execute`: see the Windows facts below.
   The path comes from the window itself: every `status` request carries `exe`
   (`current_exe()`), and the tool saves it in `dropper_path` (`src/drop_window.lua` turns it
-  into the `.app` on macOS and skips App Translocation copies). With no known path, *Launch
-  window* shows the "Get the drop window" dialog (`src/get_window_ui.lua`), which links to the
-  releases page, names this OS's file, closes itself when the window connects, and still offers
-  a file prompt.
+  into the `.app` on macOS and skips App Translocation copies). The request also carries a local
+  UDP `control_port`: on `tool_will_unload` (reload, disable or Renoise quitting) the tool sends
+  one `kind = shutdown` frame there, and the window closes unless a tool reconnects within eight
+  seconds. With no known path, *Launch window* shows the "Get the drop window" dialog
+  (`src/get_window_ui.lua`), which links to the releases page, names this OS's file, closes
+  itself when the window connects, and still offers a file prompt.
 - The drop window remembers its position and size through eframe's `persistence` feature
   (`app.ron` in `~/.local/share/midi-drop`, `~/Library/Application Support/midi-drop` or
   `%APPDATA%\midi-drop\data`). On Linux, `dropper/src/window_memory.rs` corrects the saved
@@ -62,10 +65,11 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
 ### Open items (good first work, especially on Windows/macOS)
 
 - Real plugin drag on Windows and macOS (Linux was tested with file-manager drags only).
-- *Launch window* on Windows (PowerShell path) and macOS (`open` + Gatekeeper on the unsigned app).
+- *Launch window* on macOS (`open` + Gatekeeper on the unsigned app).
 - macOS file promises (`NSFilePromiseProvider`): winit only delivers real file paths.
-- Check whether Windows sockets leak into the launched window anyway (`Start-Process` should prevent
-  it). On Unix the window closes inherited fds at startup (`close_inherited_fds` in `main.rs`).
+- On Unix the window closes inherited fds at startup (`close_inherited_fds` in `main.rs`). On
+  Windows `Start-Process` keeps them out of the window (verified: a reload rebinds both ports while
+  the window runs), but `cmd.exe` and PowerShell hold copies for the moment they run.
 - Check that the drop window reopens where it was left on Windows and macOS. Both use eframe's own
   restore, untested here. Also check a saved position on a monitor that is no longer connected
   (eframe pulls it back on Windows, macOS does it by itself; GNOME did it on Linux), and that
@@ -77,6 +81,25 @@ and verified on Linux. Prefer fixes that keep all three working, and say which O
   from `update()`; if the OS stops redrawing a minimized window, it looks closed after 3 s and
   *Find* starts a second one.
 - `just dropper-run` connects too, so it saves the `dropper/target/` path in `dropper_path`.
+
+### Verified the hard way (2026-11-08, Renoise 3.5.4, Windows 11)
+
+- **Every `os.execute` from a button or menu costs about 5.3 s while Renoise is the front window**,
+  even `echo hi`; from a timer with another app in front the same call takes 0.3 s. `system()`
+  blocks Renoise's main thread, `cmd.exe` needs a new console window, and Windows waits for the
+  front window's thread to acknowledge the activation until its 5 s hung-window timeout. The
+  program only starts after that. v1.00 and v1.01 behaved alike; the "1.01 regression" was this.
+  `io.popen` returns as soon as the shell is started (15 ms measured, window on screen within a
+  second); `pclose` waits for the shell, so the pipe is closed later from the launch-check timer.
+  The shell's console now flashes briefly; before, it was created behind the blocked Renoise.
+- `start "" /B ...` inside `os.execute` is not a fix: cmd's quoting turned it into bare interactive
+  `cmd.exe` windows that never exit and hold inherited copies of Renoise's listening sockets.
+  Symptom after the next reload: two `LISTENING` rows per port in `netstat -ano`, connections
+  refused, bridge "dead" until those processes are killed.
+- `renoise.app():open_url(path)` goes to the default browser for every string, `.exe` paths and
+  `file://` URLs included; `open_path(exe)` selects the file in Explorer. Neither starts a program.
+- With `core.autocrlf=true` the checkout was CRLF and `stylua --check` failed on every file.
+  `.gitattributes` forces LF for all text files; never add line-ending flags to the justfile.
 
 ### Verified the hard way (2026-11-01, Renoise 3.5.4, Linux)
 

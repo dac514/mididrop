@@ -149,6 +149,12 @@ And one small fix that would have saved us a bug hunt:
    these copies at startup, so you don't need to worry.) Marking the sockets
    "close on exec" inside Renoise would fix this for every tool.
 
+4. **A way to start a program without waiting for it.** On Windows,
+   `os.execute` blocks Renoise while the shell opens a console window, and
+   Windows waits 5 seconds for the blocked front window before it gives up.
+   Every tool that starts a helper program from a button pays those 5 seconds.
+   MIDI Drop uses `io.popen` instead, which returns at once.
+
 Of course, the best fix of all would be for Renoise's own MIDI drop to land at
 the cursor. Then nobody needs a tool. Until that day, there is MIDI Drop.
 
@@ -165,8 +171,8 @@ welcome.** MIDI Drop was built and tested on Linux. Open items:
 
 - Test a real drag from a plugin on Windows and on macOS. (On Linux it was
   tested with drags from a file manager, which works the same way.)
-- Test *Launch window* on Windows (it uses PowerShell's `Start-Process`) and
-  on macOS (it uses `open` with the `.app`).
+- Test *Launch window* on macOS (it uses `open` with the `.app`). On Windows
+  it was tested in November 2026.
 - Check plugins that drag in unusual ways. For example, macOS can drag a
   "file promise" instead of a real file. The drop window does not support
   that yet.
