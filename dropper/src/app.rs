@@ -17,6 +17,27 @@ use crate::wire::{self, Records};
 
 const POLL: Duration = Duration::from_millis(700);
 const FLASH: Duration = Duration::from_millis(900);
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(8);
+
+#[derive(Default)]
+struct ShutdownTimer {
+    started: Option<Instant>,
+}
+
+impl ShutdownTimer {
+    fn signal(&mut self) {
+        self.started = Some(Instant::now());
+    }
+
+    fn reconnected(&mut self) {
+        self.started = None;
+    }
+
+    fn expired(&self, now: Instant) -> bool {
+        self.started
+            .is_some_and(|started| now.saturating_duration_since(started) >= SHUTDOWN_GRACE)
+    }
+}
 
 /// Where *Launch window* in Renoise brings an open window back to: near the
 /// top-left corner of the main screen, which every OS puts at (0, 0).
@@ -103,6 +124,7 @@ pub struct DropApp {
     flash: Option<(Instant, Color32)>,
     /// Files from the command line, placed on the first frame.
     startup: Vec<PathBuf>,
+    shutdown: ShutdownTimer,
     #[cfg(target_os = "linux")]
     frame: FrameProbe,
 }
@@ -170,6 +192,7 @@ impl DropApp {
             outcome: Outcome::Idle,
             flash: None,
             startup: files,
+            shutdown: ShutdownTimer::default(),
             #[cfg(target_os = "linux")]
             frame: FrameProbe::new(cc.storage),
         }
@@ -194,6 +217,7 @@ impl DropApp {
             self.in_flight = self.in_flight.saturating_sub(1);
             match reply {
                 Reply::Status(r) => {
+                    self.shutdown.reconnected();
                     self.link = Link::Online;
                     self.target = Target::from_records(&r);
                     if wire::text(&r, "summon") == "1" {
@@ -201,6 +225,7 @@ impl DropApp {
                     }
                 }
                 Reply::Dropped(r) => {
+                    self.shutdown.reconnected();
                     self.link = Link::Online;
                     self.target = Target::from_records(&r);
                     let file = match &self.outcome {
@@ -217,8 +242,12 @@ impl DropApp {
                     self.flash = Some((Instant::now(), P.ok));
                 }
                 Reply::Rejected(error) => {
+                    self.shutdown.reconnected();
                     self.link = Link::Online;
                     self.fail(error);
+                }
+                Reply::Shutdown => {
+                    self.shutdown.signal();
                 }
                 Reply::Offline => {
                     self.link = Link::Offline;
@@ -325,6 +354,9 @@ impl eframe::App for DropApp {
         #[cfg(target_os = "linux")]
         self.frame.update(ctx);
         self.receive(ctx);
+        if self.shutdown.expired(Instant::now()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         self.take_drops(ctx);
         self.poll();
         ctx.request_repaint_after(POLL);
@@ -357,6 +389,30 @@ impl eframe::App for DropApp {
                 self.paint_zone(painter, zone, hovering, flash);
                 self.paint_footer(painter, footer);
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_expires_after_the_grace_period() {
+        let started = Instant::now();
+        let timer = ShutdownTimer {
+            started: Some(started),
+        };
+        assert!(!timer.expired(started + SHUTDOWN_GRACE - Duration::from_millis(1)));
+        assert!(timer.expired(started + SHUTDOWN_GRACE));
+    }
+
+    #[test]
+    fn reconnect_cancels_the_pending_shutdown() {
+        let mut timer = ShutdownTimer {
+            started: Some(Instant::now()),
+        };
+        timer.reconnected();
+        assert!(!timer.expired(Instant::now() + SHUTDOWN_GRACE));
     }
 }
 

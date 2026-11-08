@@ -27,6 +27,7 @@ t.check(true, "partial frames wait")
 
 -- Status sorts first in replies.
 t.eq(wire.encode { status = "ok", a = "1" }, "16\nstatus 2\noka 1\n1", "status first")
+t.eq(wire.encode { kind = "shutdown" }, "15\nkind 8\nshutdown", "shutdown signal")
 t.eq(wire.encode {}, "0\n", "empty frame")
 local empty = wire.decode "0\n"
 t.check(empty ~= nil and next(empty) == nil, "empty frame decodes")

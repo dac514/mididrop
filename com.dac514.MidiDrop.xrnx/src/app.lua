@@ -21,6 +21,7 @@ local text = require "src.text"
 local target = require "src.target"
 local writer = require "src.writer"
 local server = require "src.server"
+local wire = require "src.wire"
 local drop_window = require "src.drop_window"
 
 local App = {}
@@ -321,6 +322,40 @@ end
 ---@type number|nil
 local summon_at = nil
 local SUMMON_SECONDS = 10 -- long enough for a window that Find starts to connect
+---The UDP port where the connected drop window listens for the shutdown signal,
+---from its last status request.
+---@type integer|nil
+local dropper_control_port = nil
+
+---@param value string|nil
+local function remember_control_port(value)
+  local port = tonumber(value)
+  if port and port == math.floor(port) and port >= 1 and port <= 65535 then
+    dropper_control_port = port
+  else
+    dropper_control_port = nil
+  end
+end
+
+---Tell the open drop window that Renoise is going away (one UDP datagram to
+---the control port it announced). The window closes unless a reloaded tool
+---reconnects within a few seconds.
+function App.notify_dropper_shutdown()
+  if not dropper_control_port then
+    return
+  end
+  local client, err =
+    renoise.Socket.create_client("127.0.0.1", dropper_control_port, renoise.Socket.PROTOCOL_UDP, 0)
+  if not client then
+    App.log("could not signal the drop window to close: " .. tostring(err))
+    return
+  end
+  local sent, send_err = client:send(wire.encode { kind = "shutdown" })
+  client:close()
+  if not sent then
+    App.log("could not signal the drop window to close: " .. tostring(send_err))
+  end
+end
 
 ---Remember where the drop window program is, from the path a running window
 ---reports. *Launch window* then starts it without asking.
@@ -349,6 +384,7 @@ end
 ---@return table<string, any>
 function App.handle_request(records)
   if records.kind == "status" then
+    remember_control_port(records.control_port)
     remember_dropper(records.exe)
     local reply = App.target_records()
     if summon_at and os.time() - summon_at <= SUMMON_SECONDS then
@@ -375,6 +411,11 @@ function App.restart_server()
   server.start(App.prefs().port.value, App.guard(App.handle_request), App.log_sink)
 end
 
+local function on_tool_will_unload()
+  App.notify_dropper_shutdown()
+  server.stop()
+end
+
 -- Drop window --------------------------------------------------------------------
 
 ---POSIX shell single quotes.
@@ -395,6 +436,9 @@ local LAUNCH_CHECK_MS = 4000 -- how long the window gets to say hello
 
 ---@type fun()|nil
 local launch_check = nil
+---The pipe from `io.popen` of the last Windows launch, until `launch_check` closes it.
+---@type file*|nil
+local launch_pipe = nil
 
 ---@return boolean
 local function dropper_connected()
@@ -487,6 +531,7 @@ function App.launch_dropper()
   if platform == "WINDOWS" then
     -- Start-Process goes through the Windows shell, so the window does not
     -- inherit Renoise's sockets (cmd's `start` would hand it the tool's port).
+    -- Started through io.popen below, see there.
     cmd = ("powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Start-Process -FilePath %s -ArgumentList '--port','%s'\""):format(
       ps_quote(path),
       port
@@ -500,16 +545,34 @@ function App.launch_dropper()
     cmd = ("%s --port %s >/dev/null 2>&1 &"):format(shell_quote(path), port)
   end
   App.log("launch: " .. cmd)
-  os.execute(cmd)
-
   local tool = renoise.tool()
   if launch_check and tool:has_timer(launch_check) then
     tool:remove_timer(launch_check)
   end
+  if launch_pipe then
+    launch_pipe:close()
+    launch_pipe = nil
+  end
+  local t0 = os.clock()
+  if platform == "WINDOWS" then
+    -- Not os.execute: that waits for the shell, and while Renoise's main thread
+    -- waits, Windows cannot activate the shell's new console window (Renoise is
+    -- the front window) and gives up only after its 5 s hung-window timeout.
+    -- io.popen returns as soon as the shell is started; the pipe is closed by
+    -- the launch check below, when the shell has long exited.
+    launch_pipe = io.popen(cmd)
+  else
+    os.execute(cmd)
+  end
+  App.log(("launch: shell started after %.0f ms"):format((os.clock() - t0) * 1000))
   local launched_at = os.time()
   local check
   check = App.guard(function()
     tool:remove_timer(check)
+    if launch_pipe then
+      launch_pipe:close()
+      launch_pipe = nil
+    end
     local contact = server.state.last_contact
     if not contact or contact < launched_at then
       renoise.app():show_status(
@@ -540,7 +603,7 @@ function App.start()
   reg.key { name = App.find_keybinding, invoke = App.guard(App.find_dropper) }
   -- Close dialogs when the song changes so no view keeps stale song references.
   reg.notifier(renoise.tool().app_new_document_observable, App.close_dialogs)
-  reg.notifier(renoise.tool().tool_will_unload_observable, server.stop)
+  reg.notifier(renoise.tool().tool_will_unload_observable, App.guard(on_tool_will_unload))
   reg.notifier(App.prefs().port, App.restart_server)
   App.restart_server()
   App.log "started"

@@ -25,6 +25,8 @@ You can also open the monitor from the right-click menu of the pattern editor
 and the phrase editor, or give it a key: *Global > Tools > Show MIDI Drop*.
 The window has a key too: *Global > Tools > Launch MIDI Drop Window*.
 
+When you quit Renoise, the window closes by itself a few seconds later.
+
 The window opens where you left it last time. **Can't find it?** Maybe it was
 on a screen you unplugged. Choose *Tools > Find MIDI Drop Window*, and the
 window comes back to the top left of your main screen. This has a key too:

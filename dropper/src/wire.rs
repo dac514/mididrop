@@ -105,6 +105,16 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_signal_matches_lua_encoding() {
+        let frame = encode(&[("kind", b"shutdown")]);
+        assert_eq!(frame, b"15\nkind 8\nshutdown");
+        assert!(matches!(
+            decode(&frame),
+            Decoded::Frame(records) if text(&records, "kind") == "shutdown"
+        ));
+    }
+
+    #[test]
     fn partial_frames_wait() {
         let frame = encode(&[("kind", b"status")]);
         for cut in 0..frame.len() {

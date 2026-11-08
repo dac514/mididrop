@@ -6,10 +6,12 @@
     frame   := <body_len>\n<body>
     body    := (<name> <len>\n<bytes>)*
 
-  Requests carry `kind` ("status" or "drop"); drops add `name` (file name) and
-  `data` (the raw .mid bytes; the window reads the file at drop time because
+  Requests carry `kind` ("status", "drop", or "shutdown"). Status requests
+  include the drop window's local UDP control port; drops add `name` (file name)
+  and `data` (the raw .mid bytes; the window reads the file at drop time because
   plugins delete their temp files when the drag ends). Replies carry `status`
-  ("ok" or "error") plus text records for the window to show.
+  ("ok" or "error") plus text records for the window to show. The one-way
+  shutdown signal uses the same frame on the advertised UDP control port.
 ]]
 
 local M = {}
