@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>6.2</ApiVersion>
   <Id>com.dac514.MidiDrop</Id>
-  <Version>1.02</Version>
+  <Version>1.03</Version>
   <Author>Dac Chartrand [dac.chartrand@gmail.com]</Author>
   <Name>MIDI Drop</Name>
   <Category>MIDI</Category>
@@ -11,4 +11,5 @@
   <License>MIT</License>
   <DocumentationPath>README.md</DocumentationPath>
   <Homepage>https://github.com/dac514/mididrop</Homepage>
+  <Discussion>https://forum.renoise.com/t/tool-drag-and-drop-midi-to-renoise-from-a-plugin-request-fulfilled-by-conner-bw/79721</Discussion>
 </RenoiseScriptingTool>

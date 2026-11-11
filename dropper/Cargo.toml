@@ -1,6 +1,6 @@
 [package]
 name = "midi-drop"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 rust-version = "1.88"
 description = "Drop window for the MIDI Drop Renoise tool: drag MIDI from a plugin, it lands at the Renoise cursor"
